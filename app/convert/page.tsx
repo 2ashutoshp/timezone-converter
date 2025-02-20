@@ -7,36 +7,65 @@ import TimeConversionResult from "@/components/TimeConversionResult";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import Spinner from "@/components/Spinner";
 
+const fetchDynamicTimezones = () => {
+  const zones = Intl.supportedValuesOf("timeZone");
+  return zones.map((zone) => {
+    const abbreviation = DateTime.fromObject(
+      { year: 2024, month: 6, day: 1, hour: 12 },
+      { zone }
+    ).toFormat("ZZZ");
+    return { region: zone, abbreviation };
+  });
+};
+
 export default function ConvertPage() {
   const searchParams = useSearchParams();
-  const from = searchParams.get("from") || "UTC";
-  const to = searchParams.get("to") || "UTC";
+  const fromInput = searchParams.get("from") || "UTC";
+  const toInput = searchParams.get("to") || "UTC";
   const date = searchParams.get("date") || "";
   const time = searchParams.get("time") || "";
 
   const [conversionResult, setConversionResult] =
     useState<TimezoneConversion | null>(null);
   const [loading, setLoading] = useState(true);
+  const [timezoneMappings, setTimezoneMappings] = useState<
+    { region: string; abbreviation: string }[]
+  >([]);
 
   useEffect(() => {
-    if (from && to && date && time) {
+    setTimezoneMappings(fetchDynamicTimezones());
+  }, []);
+
+  const resolveTimezone = (input: string) => {
+    if (timezoneMappings.some((tz) => tz.region === input)) return input;
+    const found = timezoneMappings.find(
+      (tz) => tz.abbreviation === input.toUpperCase()
+    );
+    return found ? found.region : "UTC";
+  };
+
+  useEffect(() => {
+    if (fromInput && toInput && date && time && timezoneMappings.length > 0) {
+      const fromTimezone = resolveTimezone(fromInput);
+      const toTimezone = resolveTimezone(toInput);
+
       const originalDateTime = DateTime.fromISO(`${date}T${time}`, {
-        zone: from,
+        zone: fromTimezone,
       });
       const convertedTime = originalDateTime
-        .setZone(to)
+        .setZone(toTimezone)
         .toFormat("yyyy-MM-dd HH:mm");
 
       setConversionResult({
-        from,
-        to,
+        from: fromTimezone,
+        to: toTimezone,
         date,
         time,
         convertedTime,
       });
       setLoading(false);
     }
-  }, [from, to, date, time]);
+  }, [fromInput, toInput, date, time, timezoneMappings]);
 
   if (loading) {
     return (
@@ -48,7 +77,11 @@ export default function ConvertPage() {
 
   if (!conversionResult) {
     return (
-      <p className="text-center mt-10">Invalid data provided for conversion.</p>
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-lg text-center">
+          Conversion failed. Please try again.
+        </p>
+      </div>
     );
   }
 
